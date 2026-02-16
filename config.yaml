@@ -1,0 +1,22 @@
+# Open Device Updater Configuration
+# Supports different SOTA solutions for embedded Linux devices:
+# RAUC, Mender, SWupdate, etc.
+
+server:
+  port: 8080
+  host: 0.0.0.0
+
+security:
+  login_required: false
+  username: admin
+  password: admin
+
+update:
+  # Supported file extensions (comma-separated)
+  supported_extensions: ".raucb"
+  # Directory to upload files to
+  upload_directory: "/tmp/updates"
+  # Update command (use {filepath} as placeholder for the uploaded file path)
+  update_command: "rauc install {filepath}"
+  # Reboot command
+  reboot_command: "reboot"

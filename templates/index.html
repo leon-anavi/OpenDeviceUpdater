@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Open Device Updater</title>
+    <link href="{{ url_for('static', filename='css/vuetify.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/materialdesignicons.min.css') }}" rel="stylesheet">
+    <style>
+        html, body { height: 100%; }
+        .v-application { height: 100%; }
+    </style>
+</head>
+<body>
+    <div id="app" data-supported-extensions="{{ supported_extensions }}" data-login-required="{{ 'true' if login_required else 'false' }}">
+    {% raw %}
+        <v-app>
+            <v-main>
+                <v-container fluid class="fill-height">
+                    <v-row align="center" justify="center">
+                        <v-col cols="12" sm="8" md="6" lg="4">
+                            <v-card class="elevation-8">
+                                <v-toolbar color="primary" dark flat>
+                                    <v-toolbar-title class="text-center">
+                                        <v-icon icon="mdi-update" class="mr-2"></v-icon>
+                                        Open Device Updater
+                                    </v-toolbar-title>
+                                </v-toolbar>
+                                
+                                <v-card-text>
+                                    <v-alert
+                                        v-if="error"
+                                        type="error"
+                                        closable
+                                        @click:close="error = ''"
+                                        class="mb-4"
+                                    >
+                                        {{ error }}
+                                    </v-alert>
+                                    
+                                    <v-alert
+                                        v-if="successMessage"
+                                        type="success"
+                                        closable
+                                        @click:close="successMessage = ''"
+                                        class="mb-4"
+                                    >
+                                        {{ successMessage }}
+                                    </v-alert>
+
+                                    <v-form v-if="loginRequired && !authenticated" @submit.prevent="login">
+                                        <v-text-field
+                                            v-model="username"
+                                            label="Username"
+                                            prepend-icon="mdi-account"
+                                            required
+                                        ></v-text-field>
+                                        <v-text-field
+                                            v-model="password"
+                                            label="Password"
+                                            :type="showPassword ? 'text' : 'password'"
+                                            prepend-icon="mdi-lock"
+                                            :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+                                            @click:append-inner="showPassword = !showPassword"
+                                            required
+                                        ></v-text-field>
+                                        <v-btn
+                                            type="submit"
+                                            color="primary"
+                                            block
+                                            :loading="loading"
+                                            class="mt-4"
+                                        >
+                                            Login
+                                        </v-btn>
+                                    </v-form>
+
+                                    <div v-else-if="step === 'select'">
+                                        <v-btn
+                                            color="primary"
+                                            block
+                                            @click="triggerFileInput"
+                                            class="mb-4"
+                                        >
+                                            <v-icon left>mdi-file-upload</v-icon>
+                                            {{ selectedFileName || 'Select update file' }}
+                                        </v-btn>
+                                        
+                                        <input
+                                            ref="fileInput"
+                                            type="file"
+                                            :accept="supportedExtensions"
+                                            style="display: none"
+                                            @change="handleFileChange"
+                                        >
+                                        
+                                        <v-alert
+                                            v-if="fileError"
+                                            type="warning"
+                                            density="compact"
+                                            class="mt-2"
+                                        >
+                                            {{ fileError }}
+                                        </v-alert>
+                                        
+                                        <v-btn
+                                            color="primary"
+                                            block
+                                            :disabled="!selectedFile || !!fileError"
+                                            :loading="loading"
+                                            @click="uploadFile"
+                                            class="mt-4"
+                                        >
+                                            <v-icon left>mdi-upload</v-icon>
+                                            Upload & Install
+                                        </v-btn>
+                                    </div>
+
+                                    <div v-else-if="step === 'updating'">
+                                        <v-card-text class="text-center py-8">
+                                            <v-progress-circular
+                                                indeterminate
+                                                color="primary"
+                                                size="64"
+                                            ></v-progress-circular>
+                                            <p class="text-h6 mt-4">Updating...</p>
+                                            <p class="text-body-2 text-grey">
+                                                Please wait while the device is being updated.
+                                            </p>
+                                        </v-card-text>
+                                    </div>
+
+                                    <div v-else-if="step === 'result'">
+                                        <v-card-text class="text-center">
+                                            <v-icon
+                                                :icon="updateSuccess ? 'mdi-check-circle' : 'mdi-alert-circle'"
+                                                :color="updateSuccess ? 'success' : 'error'"
+                                                size="64"
+                                            ></v-icon>
+                                            <p class="text-h5 mt-4">
+                                                {{ updateSuccess ? 'Update Successful!' : 'Update Failed' }}
+                                            </p>
+                                            <p class="text-body-2 mt-2">{{ updateMessage }}</p>
+                                            
+                                            <v-divider class="my-4"></v-divider>
+                                            
+                                            <p class="text-body-1">
+                                                Would you like to restart the device now?
+                                            </p>
+                                            
+                                            <v-btn
+                                                color="warning"
+                                                size="large"
+                                                :loading="rebooting"
+                                                @click="rebootDevice"
+                                                class="mt-4 mr-2"
+                                            >
+                                                <v-icon left>mdi-restart</v-icon>
+                                                Restart Now
+                                            </v-btn>
+                                            
+                                            <v-btn
+                                                variant="outlined"
+                                                size="large"
+                                                @click="reset"
+                                                class="mt-4"
+                                            >
+                                                Later
+                                            </v-btn>
+                                        </v-card-text>
+                                    </div>
+
+                                    <div v-else-if="step === 'rebooting'">
+                                        <v-card-text class="text-center py-8">
+                                            <v-progress-circular
+                                                indeterminate
+                                                color="warning"
+                                                size="64"
+                                            ></v-progress-circular>
+                                            <p class="text-h6 mt-4">Rebooting...</p>
+                                            <p class="text-body-2 text-grey">
+                                                The device is restarting. The page will refresh when the device is back online.
+                                            </p>
+                                        </v-card-text>
+                                    </div>
+                                </v-card-text>
+                            </v-card>
+                        </v-col>
+                    </v-row>
+                </v-container>
+            </v-main>
+        </v-app>
+    </div>
+    {% endraw %}
+
+    <script src="{{ url_for('static', filename='js/vue.global.prod.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/vuetify.min.js') }}"></script>
+    <script>
+        const { createApp, ref, computed } = Vue;
+        const { createVuetify } = Vuetify;
+
+        const vuetify = createVuetify();
+
+        const app = createApp({
+            setup() {
+                const appEl = document.getElementById('app');
+                const loginRequired = appEl.dataset.loginRequired === 'true';
+                const supportedExtensions = appEl.dataset.supportedExtensions.split(',').map(e => e.trim());
+                
+                const username = ref('');
+                const password = ref('');
+                const showPassword = ref(false);
+                const authenticated = ref(!loginRequired);
+                const loading = ref(false);
+                const error = ref('');
+                const successMessage = ref('');
+                const selectedFile = ref(null);
+                const selectedFileName = ref('');
+                const fileInput = ref(null);
+                const fileError = ref('');
+                const step = ref('select');
+                const updateSuccess = ref(false);
+                const updateMessage = ref('');
+                const rebooting = ref(false);
+                const uploadedFilepath = ref('');
+
+                const validateFile = () => {
+                    if (!selectedFile.value) {
+                        fileError.value = '';
+                        return;
+                    }
+                    
+                    let fileName = '';
+                    if (typeof selectedFile.value === 'string') {
+                        fileName = selectedFile.value;
+                    } else if (selectedFile.value && selectedFile.value.name) {
+                        fileName = selectedFile.value.name;
+                    }
+                    
+                    const ext = fileName.includes('.') ? '.' + fileName.split('.').pop().toLowerCase() : '';
+                    
+                    if (ext && !supportedExtensions.includes(ext)) {
+                        fileError.value = 'ERROR: unsupported file type. Please upload ' + supportedExtensions.join(', ');
+                    } else {
+                        fileError.value = '';
+                    }
+                };
+
+                const triggerFileInput = () => {
+                    fileInput.value.click();
+                };
+                
+                const handleFileChange = (event) => {
+                    const file = event.target.files[0];
+                    if (file) {
+                        selectedFile.value = file;
+                        selectedFileName.value = file.name;
+                        validateFile();
+                    }
+                };
+
+                const login = async () => {
+                    loading.value = true;
+                    error.value = '';
+                    
+                    try {
+                        const response = await fetch('/api/login', {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: username.value, password: password.value })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (data.success) {
+                            authenticated.value = true;
+                        } else {
+                            error.value = data.error || 'Login failed';
+                        }
+                    } catch (e) {
+                        error.value = 'Connection error';
+                    }
+                    
+                    loading.value = false;
+                };
+
+                const uploadFile = async () => {
+                    if (!selectedFile.value) {
+                        error.value = 'Please select a file first';
+                        return;
+                    }
+                    
+                    loading.value = true;
+                    error.value = '';
+                    
+                    const file = selectedFile.value;
+                    
+                    if (!file || !(file instanceof File)) {
+                        error.value = 'Invalid file object';
+                        loading.value = false;
+                        return;
+                    }
+                    
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    
+                    try {
+                        const response = await fetch('/api/upload', {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            body: formData
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (data.error) {
+                            error.value = data.error;
+                            loading.value = false;
+                            return;
+                        }
+                        
+                        if (data.filepath) {
+                            uploadedFilepath.value = data.filepath;
+                            step.value = 'updating';
+                            await runUpdate(data.filepath);
+                        } else {
+                            error.value = 'Upload failed: unknown error';
+                        }
+                    } catch (e) {
+                        error.value = 'Upload failed: ' + e.message;
+                    }
+                    
+                    loading.value = false;
+                };
+
+                const runUpdate = async (filepath) => {
+                    try {
+                        const response = await fetch('/api/update', {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ filepath })
+                        });
+                        
+                        const data = await response.json();
+                        updateSuccess.value = data.success;
+                        updateMessage.value = data.message || data.error || '';
+                        step.value = 'result';
+                    } catch (e) {
+                        updateSuccess.value = false;
+                        updateMessage.value = 'Update failed: ' + e.message;
+                        step.value = 'result';
+                    }
+                };
+
+                const rebootDevice = async () => {
+                    rebooting.value = true;
+                    
+                    try {
+                        await fetch('/api/reboot', { 
+                            method: 'POST',
+                            credentials: 'same-origin'
+                        });
+                        step.value = 'rebooting';
+                        
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 30000);
+                    } catch (e) {
+                        error.value = 'Reboot failed: ' + e.message;
+                    }
+                    
+                    rebooting.value = false;
+                };
+
+                const reset = () => {
+                    step.value = 'select';
+                    selectedFile.value = null;
+                    uploadedFilepath.value = '';
+                    updateSuccess.value = false;
+                    updateMessage.value = '';
+                    error.value = '';
+                    successMessage.value = '';
+                };
+
+                return {
+                    loginRequired,
+                    supportedExtensions: "{{ supported_extensions }}",
+                    username,
+                    password,
+                    showPassword,
+                    authenticated,
+                    loading,
+                    error,
+                    successMessage,
+                    selectedFile,
+                    selectedFileName,
+                    fileInput,
+                    fileError,
+                    step,
+                    updateSuccess,
+                    updateMessage,
+                    rebooting,
+                    validateFile,
+                    triggerFileInput,
+                    handleFileChange,
+                    login,
+                    uploadFile,
+                    rebootDevice,
+                    reset
+                };
+            }
+        });
+
+        app.use(vuetify);
+        app.mount('#app');
+    </script>
+</body>
+</html>
