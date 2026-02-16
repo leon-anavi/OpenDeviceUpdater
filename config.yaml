@@ -1,5 +1,5 @@
 # Open Device Updater Configuration
-# Supports different SOTA solutions for embedded Linux devices:
+# Supports different open source SOTA solutions for embedded Linux devices:
 # RAUC, Mender, SWupdate, etc.
 
 server:
@@ -9,7 +9,8 @@ server:
 security:
   login_required: false
   username: admin
-  password: admin
+  # Default password: admin
+  password_hash: "$2b$12$nzoOtKdlsaxbtdFpe3/EMel.t3zx2dmfIOdIOrjkpOxhEyPzj0pPy"
 
 update:
   # Supported file extensions (comma-separated)

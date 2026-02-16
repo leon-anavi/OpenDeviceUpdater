@@ -2,6 +2,7 @@ import os
 import subprocess
 import uuid
 import yaml
+import bcrypt
 from functools import wraps
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from werkzeug.utils import secure_filename
@@ -22,7 +23,7 @@ UPDATE_COMMAND = config['update']['update_command']
 REBOOT_COMMAND = config['update']['reboot_command']
 LOGIN_REQUIRED = config['security']['login_required']
 USERNAME = config['security']['username']
-PASSWORD = config['security']['password']
+PASSWORD_HASH = config['security']['password_hash'].encode('utf-8')
 SERVER_PORT = config['server']['port']
 SERVER_HOST = config['server']['host']
 
@@ -54,7 +55,7 @@ def login():
     username = data.get('username', '')
     password = data.get('password', '')
     
-    if username == USERNAME and password == PASSWORD:
+    if username == USERNAME and bcrypt.checkpw(password.encode('utf-8'), PASSWORD_HASH):
         session['authenticated'] = True
         return jsonify({'success': True})
     return jsonify({'success': False, 'error': 'Invalid credentials'}), 401

@@ -16,6 +16,7 @@ A simple web interface for updating embedded Linux devices using popular open so
 - Flask
 - PyYAML
 - Werkzeug
+- bcrypt
 
 ## Installation
 
@@ -29,15 +30,24 @@ Edit `config.yaml`:
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| `server.port` | Web server port | 8000 |
+| `server.port` | Web server port | 8080 |
 | `server.host` | Web server bind address | 0.0.0.0 |
 | `security.login_required` | Enable/disable password | true |
 | `security.username` | Login username | admin |
-| `security.password` | Login password | admin123 |
+| `security.password_hash` | bcrypt hash of password | admin |
 | `update.supported_extensions` | Allowed file extensions | .raucb,.mender,.swu |
 | `update.upload_directory` | Upload directory | /tmp/updates |
 | `update.update_command` | Update command (use `{filepath}`) | rauc install {filepath} |
 | `update.reboot_command` | Reboot command | reboot |
+
+To change the password, generate a new bcrypt hash:
+
+```python
+import bcrypt
+print(bcrypt.hashpw(b'your_password', bcrypt.gensalt()).decode())
+```
+
+Then update `password_hash` in config.yaml.
 
 ## Usage
 
@@ -45,7 +55,7 @@ Edit `config.yaml`:
 python app.py
 ```
 
-Access via `http://<device-ip>:8000` from another computer on the LAN.
+Access via `http://<device-ip>:8080` from another computer on the LAN.
 
 ## Workflow
 
