@@ -147,15 +147,15 @@ def upload_file():
     file = request.files['file']
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
-    
+
     if not allowed_file(file.filename):
         return jsonify({'error': f'Invalid file extension. Allowed: {", ".join(ALLOWED_EXTENSIONS)}'}), 400
-    
+
     filename = secure_filename(file.filename)
     unique_filename = f"{uuid.uuid4()}_{filename}"
     filepath = os.path.join(UPLOAD_FOLDER, unique_filename)
     file.save(filepath)
-    
+
     return jsonify({'success': True, 'filename': unique_filename})
 
 @app.route('/api/update', methods=['POST'])
@@ -168,7 +168,15 @@ def run_update():
     if not filename:
         return jsonify({'error': 'No filename provided'}), 400
 
+    filename = secure_filename(filename)
+    if not filename:
+        return jsonify({'error': 'Invalid filename'}), 400
+
     filepath = os.path.join(UPLOAD_FOLDER, filename)
+    filepath = os.path.abspath(filepath)
+
+    if not filepath.startswith(os.path.abspath(UPLOAD_FOLDER)):
+        return jsonify({'error': 'Invalid file path'}), 400
 
     if not os.path.exists(filepath):
         return jsonify({'error': 'File not found'}), 400
