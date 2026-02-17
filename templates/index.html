@@ -320,10 +320,10 @@
                             return;
                         }
                         
-                        if (data.filepath) {
-                            uploadedFilepath.value = data.filepath;
+                        if (data.filename) {
+                            uploadedFilepath.value = data.filename;
                             step.value = 'updating';
-                            await runUpdate(data.filepath);
+                            await runUpdate(data.filename);
                         } else {
                             error.value = 'Upload failed: unknown error';
                         }
@@ -334,13 +334,13 @@
                     loading.value = false;
                 };
 
-                const runUpdate = async (filepath) => {
+                const runUpdate = async (filename) => {
                     try {
                         const response = await fetch('/api/update', {
                             method: 'POST',
                             credentials: 'same-origin',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ filepath })
+                            body: JSON.stringify({ filename })
                         });
                         
                         const data = await response.json();

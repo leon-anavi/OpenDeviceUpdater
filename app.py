@@ -111,17 +111,22 @@ def upload_file():
     filepath = os.path.join(UPLOAD_FOLDER, unique_filename)
     file.save(filepath)
     
-    return jsonify({'success': True, 'filepath': filepath, 'filename': filename})
+    return jsonify({'success': True, 'filename': unique_filename})
 
 @app.route('/api/update', methods=['POST'])
 @login_required
 def run_update():
     data = request.get_json()
-    filepath = data.get('filepath')
+    filename = data.get('filename')
     
-    if not filepath or not os.path.exists(filepath):
+    if not filename:
+        return jsonify({'error': 'No filename provided'}), 400
+
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
+
+    if not os.path.exists(filepath):
         return jsonify({'error': 'File not found'}), 400
-    
+
     try:
         command = UPDATE_COMMAND.format(filepath=filepath)
         result = subprocess.run(
