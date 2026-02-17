@@ -4,6 +4,7 @@ import uuid
 import yaml
 import bcrypt
 import hmac
+import time
 from functools import wraps
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from werkzeug.utils import secure_filename
@@ -65,6 +66,10 @@ USERNAME = get_config_value(config, 'security', 'username')
 PASSWORD_HASH = get_config_value(config, 'security', 'password_hash').encode('utf-8')
 SERVER_PORT = get_config_value(config, 'server', 'port')
 SERVER_HOST = get_config_value(config, 'server', 'host')
+MAX_LOGIN_ATTEMPTS = get_config_value(config, 'security', 'max_login_attempts', required=False) or 3
+LOGIN_TIMEOUT = get_config_value(config, 'security', 'login_timeout', required=False) or 60
+
+failed_login_attempts = {}
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
@@ -92,13 +97,33 @@ def index():
 @app.route('/api/login', methods=['POST'])
 @csrf_required
 def login():
+    client_ip = request.remote_addr
+
+    if client_ip in failed_login_attempts:
+        attempts_data = failed_login_attempts[client_ip]
+        if attempts_data['count'] >= MAX_LOGIN_ATTEMPTS:
+            elapsed = time.time() - attempts_data['timestamp']
+            if elapsed < LOGIN_TIMEOUT:
+                remaining = int(LOGIN_TIMEOUT - elapsed)
+                return jsonify({'error': f'Too many failed attempts. Try again in {remaining} seconds.'}), 429
+            else:
+                del failed_login_attempts[client_ip]
+
     data = request.get_json()
     username = data.get('username', '')
     password = data.get('password', '')
     
     if username == USERNAME and bcrypt.checkpw(password.encode('utf-8'), PASSWORD_HASH):
+        if client_ip in failed_login_attempts:
+            del failed_login_attempts[client_ip]
         session['authenticated'] = True
         return jsonify({'success': True})
+
+    if client_ip not in failed_login_attempts:
+        failed_login_attempts[client_ip] = {'count': 0, 'timestamp': time.time()}
+    failed_login_attempts[client_ip]['count'] += 1
+    failed_login_attempts[client_ip]['timestamp'] = time.time()
+
     return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
 
 @app.route('/api/logout', methods=['POST'])

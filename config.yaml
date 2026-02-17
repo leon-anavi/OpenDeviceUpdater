@@ -11,6 +11,11 @@ security:
   username: admin
   # Default password: admin
   password_hash: "$2b$12$nzoOtKdlsaxbtdFpe3/EMel.t3zx2dmfIOdIOrjkpOxhEyPzj0pPy"
+  # Rate limiting for login attempts
+  # Max failed attempts before timeout (default: 3)
+  max_login_attempts: 3
+  # Timeout in seconds after max failed attempts (default: 60)
+  login_timeout: 60
 
 update:
   # Supported file extensions (comma-separated)
