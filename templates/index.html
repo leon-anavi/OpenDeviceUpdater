@@ -12,7 +12,7 @@
     </style>
 </head>
 <body>
-    <div id="app" data-supported-extensions="{{ supported_extensions }}" data-login-required="{{ 'true' if login_required else 'false' }}">
+    <div id="app" data-supported-extensions="{{ supported_extensions }}" data-login-required="{{ 'true' if login_required else 'false' }}" data-csrf-token="{{ csrf_token }}">
     {% raw %}
         <v-app>
             <v-main>
@@ -206,6 +206,7 @@
                 const appEl = document.getElementById('app');
                 const loginRequired = appEl.dataset.loginRequired === 'true';
                 const supportedExtensions = appEl.dataset.supportedExtensions.split(',').map(e => e.trim());
+                const csrfToken = appEl.dataset.csrfToken;
                 
                 const username = ref('');
                 const password = ref('');
@@ -267,7 +268,10 @@
                         const response = await fetch('/api/login', {
                             method: 'POST',
                             credentials: 'same-origin',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'X-CSRF-Token': csrfToken
+                            },
                             body: JSON.stringify({ username: username.value, password: password.value })
                         });
                         
@@ -304,6 +308,7 @@
                     
                     const formData = new FormData();
                     formData.append('file', file);
+                    formData.append('csrf_token', csrfToken);
                     
                     try {
                         const response = await fetch('/api/upload', {
@@ -339,7 +344,10 @@
                         const response = await fetch('/api/update', {
                             method: 'POST',
                             credentials: 'same-origin',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'X-CSRF-Token': csrfToken
+                            },
                             body: JSON.stringify({ filename })
                         });
                         
@@ -360,7 +368,8 @@
                     try {
                         await fetch('/api/reboot', { 
                             method: 'POST',
-                            credentials: 'same-origin'
+                            credentials: 'same-origin',
+                            headers: { 'X-CSRF-Token': csrfToken }
                         });
                         step.value = 'rebooting';
                         

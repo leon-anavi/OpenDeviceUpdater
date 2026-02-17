@@ -3,12 +3,28 @@ import subprocess
 import uuid
 import yaml
 import bcrypt
+import hmac
 from functools import wraps
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
+
+def get_csrf_token():
+    if 'csrf_token' not in session:
+        session['csrf_token'] = uuid.uuid4().hex
+    return session['csrf_token']
+
+def csrf_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        token = session.get('csrf_token')
+        request_token = request.headers.get('X-CSRF-Token') or request.form.get('csrf_token')
+        if not token or not hmac.compare_digest(token, request_token or ''):
+            return jsonify({'error': 'CSRF token missing or invalid'}), 403
+        return f(*args, **kwargs)
+    return decorated_function
 
 def load_config():
     config_path = os.path.join(os.path.dirname(__file__), 'config.yaml')
@@ -68,11 +84,13 @@ def allowed_file(filename):
 
 @app.route('/')
 def index():
+    csrf_token = get_csrf_token()
     if LOGIN_REQUIRED and not session.get('authenticated'):
-        return render_template('index.html', login_required=True, supported_extensions=get_config_value(config, 'update', 'supported_extensions'))
-    return render_template('index.html', login_required=False, supported_extensions=get_config_value(config, 'update', 'supported_extensions'))
+        return render_template('index.html', login_required=True, supported_extensions=get_config_value(config, 'update', 'supported_extensions'), csrf_token=csrf_token)
+    return render_template('index.html', login_required=False, supported_extensions=get_config_value(config, 'update', 'supported_extensions'), csrf_token=csrf_token)
 
 @app.route('/api/login', methods=['POST'])
+@csrf_required
 def login():
     data = request.get_json()
     username = data.get('username', '')
@@ -84,6 +102,7 @@ def login():
     return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
 
 @app.route('/api/logout', methods=['POST'])
+@csrf_required
 def logout():
     session.clear()
     return jsonify({'success': True})
@@ -95,6 +114,7 @@ def check_auth():
 
 @app.route('/api/upload', methods=['POST'])
 @login_required
+@csrf_required
 def upload_file():
     if 'file' not in request.files:
         return jsonify({'error': 'No file part'}), 400
@@ -115,6 +135,7 @@ def upload_file():
 
 @app.route('/api/update', methods=['POST'])
 @login_required
+@csrf_required
 def run_update():
     data = request.get_json()
     filename = data.get('filename')
@@ -156,6 +177,7 @@ def run_update():
 
 @app.route('/api/reboot', methods=['POST'])
 @login_required
+@csrf_required
 def reboot():
     try:
         subprocess.Popen(REBOOT_COMMAND, shell=True)
