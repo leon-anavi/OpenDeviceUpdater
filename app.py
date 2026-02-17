@@ -4,13 +4,26 @@ import uuid
 import yaml
 import bcrypt
 import hmac
-import time
 from functools import wraps
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_limiter.errors import RateLimitExceeded
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
+
+limiter = Limiter(
+    key_func=get_remote_address,
+    app=app,
+    default_limits=[],
+    storage_uri="memory://"
+)
+
+@app.errorhandler(RateLimitExceeded)
+def handle_rate_limit_error(e):
+    return jsonify({'error': f'Too many failed attempts. Try again later.'}), 429
 
 def get_csrf_token():
     if 'csrf_token' not in session:
@@ -69,8 +82,6 @@ SERVER_HOST = get_config_value(config, 'server', 'host')
 MAX_LOGIN_ATTEMPTS = get_config_value(config, 'security', 'max_login_attempts', required=False) or 3
 LOGIN_TIMEOUT = get_config_value(config, 'security', 'login_timeout', required=False) or 60
 
-failed_login_attempts = {}
-
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def login_required(f):
@@ -95,34 +106,16 @@ def index():
     return render_template('index.html', login_required=False, supported_extensions=get_config_value(config, 'update', 'supported_extensions'), csrf_token=csrf_token)
 
 @app.route('/api/login', methods=['POST'])
+@limiter.limit(f"{MAX_LOGIN_ATTEMPTS} per {LOGIN_TIMEOUT} seconds", methods=["POST"], error_message=f"Too many failed attempts. Try again in {LOGIN_TIMEOUT} seconds.")
 @csrf_required
 def login():
-    client_ip = request.remote_addr
-
-    if client_ip in failed_login_attempts:
-        attempts_data = failed_login_attempts[client_ip]
-        if attempts_data['count'] >= MAX_LOGIN_ATTEMPTS:
-            elapsed = time.time() - attempts_data['timestamp']
-            if elapsed < LOGIN_TIMEOUT:
-                remaining = int(LOGIN_TIMEOUT - elapsed)
-                return jsonify({'error': f'Too many failed attempts. Try again in {remaining} seconds.'}), 429
-            else:
-                del failed_login_attempts[client_ip]
-
     data = request.get_json()
     username = data.get('username', '')
     password = data.get('password', '')
     
     if username == USERNAME and bcrypt.checkpw(password.encode('utf-8'), PASSWORD_HASH):
-        if client_ip in failed_login_attempts:
-            del failed_login_attempts[client_ip]
         session['authenticated'] = True
         return jsonify({'success': True})
-
-    if client_ip not in failed_login_attempts:
-        failed_login_attempts[client_ip] = {'count': 0, 'timestamp': time.time()}
-    failed_login_attempts[client_ip]['count'] += 1
-    failed_login_attempts[client_ip]['timestamp'] = time.time()
 
     return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
 
