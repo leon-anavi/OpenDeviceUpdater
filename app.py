@@ -12,20 +12,43 @@ app.secret_key = os.urandom(24)
 
 def load_config():
     config_path = os.path.join(os.path.dirname(__file__), 'config.yaml')
-    with open(config_path, 'r') as f:
-        return yaml.safe_load(f)
+    try:
+        with open(config_path, 'r') as f:
+            return yaml.safe_load(f)
+    except FileNotFoundError:
+        print(f"ERROR: Config file not found: {config_path}")
+        exit(1)
+    except yaml.YAMLError as e:
+        print(f"ERROR: Failed to parse config file: {e}")
+        exit(1)
+
+def get_config_value(config, *keys, required=True):
+    """Safely get a nested config value with helpful error messages."""
+    current = config
+    path = []
+    for key in keys:
+        path.append(key)
+        if not isinstance(current, dict) or key not in current:
+            if required:
+                print(f"ERROR: Missing required config key: {'.'.join(path)}")
+                print(f"  Expected path: {' -> '.join(str(k) for k in keys)}")
+                print(f"  Please add this key to your config.yaml file.")
+                exit(1)
+            return None
+        current = current[key]
+    return current
 
 config = load_config()
 
-UPLOAD_FOLDER = config['update']['upload_directory']
-ALLOWED_EXTENSIONS = set(ext.strip() for ext in config['update']['supported_extensions'].split(','))
-UPDATE_COMMAND = config['update']['update_command']
-REBOOT_COMMAND = config['update']['reboot_command']
-LOGIN_REQUIRED = config['security']['login_required']
-USERNAME = config['security']['username']
-PASSWORD_HASH = config['security']['password_hash'].encode('utf-8')
-SERVER_PORT = config['server']['port']
-SERVER_HOST = config['server']['host']
+UPLOAD_FOLDER = get_config_value(config, 'update', 'upload_directory')
+ALLOWED_EXTENSIONS = set(ext.strip() for ext in get_config_value(config, 'update', 'supported_extensions').split(','))
+UPDATE_COMMAND = get_config_value(config, 'update', 'update_command')
+REBOOT_COMMAND = get_config_value(config, 'update', 'reboot_command')
+LOGIN_REQUIRED = get_config_value(config, 'security', 'login_required')
+USERNAME = get_config_value(config, 'security', 'username')
+PASSWORD_HASH = get_config_value(config, 'security', 'password_hash').encode('utf-8')
+SERVER_PORT = get_config_value(config, 'server', 'port')
+SERVER_HOST = get_config_value(config, 'server', 'host')
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
@@ -46,8 +69,8 @@ def allowed_file(filename):
 @app.route('/')
 def index():
     if LOGIN_REQUIRED and not session.get('authenticated'):
-        return render_template('index.html', login_required=True, supported_extensions=config['update']['supported_extensions'])
-    return render_template('index.html', login_required=False, supported_extensions=config['update']['supported_extensions'])
+        return render_template('index.html', login_required=True, supported_extensions=get_config_value(config, 'update', 'supported_extensions'))
+    return render_template('index.html', login_required=False, supported_extensions=get_config_value(config, 'update', 'supported_extensions'))
 
 @app.route('/api/login', methods=['POST'])
 def login():
